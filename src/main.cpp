@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     std::cout<<"Failed to accept the connection\n";
   }
 
-  const char *response = "HTTP/1.1 200 OK\r\n \r\n";
+  const char *response = "HTTP/1.1 200 OK\r\n\r\n";
   std::cout << "Client connected\n";
 
   send(clientFd, response, strlen(response), 0);
