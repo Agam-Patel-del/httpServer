@@ -76,70 +76,72 @@ int main(int argc, char **argv){
             continue;
         }
 
-        char buffer[2048];
-        int bytesReceived = recv(clientFd, buffer, sizeof(buffer)-1, 0);
-        if(bytesReceived <= 0){
-            close(clientFd);
-            continue;
-        }
-
-        buffer[bytesReceived]='\0';
-
-        std::stringstream request(buffer);
-        std::string requestLine;
-        std::getline(request, requestLine);
-        std::istringstream requestLineStream(requestLine);
-        std::string method;
-        std::string path;
-        std::string version;
-        requestLineStream >> method >> path >> version;
-
-        std::string headerLine;
-        std::map<std::string,std::string> headers;
-        while(std::getline(request, headerLine)){
-            if(!headerLine.empty() && headerLine.back() == '\r') headerLine.pop_back();
-            if(headerLine.empty()) break;
-
-            int colon = headerLine.find(':');
-            if(colon == std::string::npos) continue;
-
-            std::string headerName = headerLine.substr(0, colon), headerValue="";
-            std::transform(headerName.begin(), headerName.end(), headerName.begin(),[](unsigned char character){
-                return std::tolower(character);
-            });
-
-            if(headerName.size() > 0){
-                int valueStart = headerLine.find_first_not_of(" \t", colon + 1);
-                if(valueStart != std::string::npos){
-                    int valueEnd = headerLine.find_last_not_of(" \t\r");
-                    headerValue = headerLine.substr(valueStart, valueEnd - valueStart + 1);
-                }
-                headers[headerName] = headerValue;
+        std::thread([clientFd](){
+            char buffer[2048];
+            int bytesReceived = recv(clientFd, buffer, sizeof(buffer)-1, 0);
+            if(bytesReceived <= 0){
+                close(clientFd);
+                return;
             }
-        }
 
-        std::string response;
-        if(method.empty() || path.empty() || version.empty()){
-            response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-        }
-        else if(path == "/"){
-            response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-        }
-        else if(path == "/echo/abc"){
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc";
-        }
-        else if(path == "/user-agent"){
-            std::string userAgent = headers["user-agent"];
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " 
-            + std::to_string(userAgent.size()) + "\r\n\r\n" + userAgent;
-        }
-        else{
-            response = "HTTP/1.1 404 Not Found\r\n\r\n";
-        }
+            buffer[bytesReceived]='\0';
 
-        std::cout << "Client connected\n";
-        send(clientFd, response.c_str(), response.size(), 0);
-        close(clientFd);
+            std::stringstream request(buffer);
+            std::string requestLine;
+            std::getline(request, requestLine);
+            std::istringstream requestLineStream(requestLine);
+            std::string method;
+            std::string path;
+            std::string version;
+            requestLineStream >> method >> path >> version;
+
+            std::string headerLine;
+            std::map<std::string,std::string> headers;
+            while(std::getline(request, headerLine)){
+                if(!headerLine.empty() && headerLine.back() == '\r') headerLine.pop_back();
+                if(headerLine.empty()) break;
+
+                int colon = headerLine.find(':');
+                if(colon == std::string::npos) continue;
+
+                std::string headerName = headerLine.substr(0, colon), headerValue="";
+                std::transform(headerName.begin(), headerName.end(), headerName.begin(),[](unsigned char character){
+                    return std::tolower(character);
+                });
+
+                if(headerName.size() > 0){
+                    int valueStart = headerLine.find_first_not_of(" \t", colon + 1);
+                    if(valueStart != std::string::npos){
+                        int valueEnd = headerLine.find_last_not_of(" \t\r");
+                        headerValue = headerLine.substr(valueStart, valueEnd - valueStart + 1);
+                    }
+                    headers[headerName] = headerValue;
+                }
+            }
+
+            std::string response;
+            if(method.empty() || path.empty() || version.empty()){
+                response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+            }
+            else if(path == "/"){
+                response = "HTTP/1.1 200 OK\r\n\r\n";
+            }
+            else if(path == "/echo/abc"){
+                response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc";
+            }
+            else if(path == "/user-agent"){
+                std::string userAgent = headers["user-agent"];
+                response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " 
+                + std::to_string(userAgent.size()) + "\r\n\r\n" + userAgent;
+            }
+            else{
+                response = "HTTP/1.1 404 Not Found\r\n\r\n";
+            }
+
+            std::cout << "Client connected\n";
+            send(clientFd, response.c_str(), response.size(), 0);
+            close(clientFd);
+        }).detach();
     }
 
     inputThread.join();
