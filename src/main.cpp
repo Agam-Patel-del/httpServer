@@ -27,7 +27,7 @@ int main(int argc, char **argv){
         std::string arg = argv[i];
         if(arg == "--directory"){
             if(i+1 < argc){
-                rootDirectory = argv[++i];
+                rootDirectory += argv[++i];
             }
             else{
                 std::cerr<<"Missing directory after --directory\n";
@@ -138,7 +138,10 @@ int main(int argc, char **argv){
                 }
             }
 
-            std::string response;
+            std::string requestBody;
+            std::getline(request, requestBody);
+
+            std::string response="";
             if(method.empty() || path.empty() || version.empty()){
                 response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
             }
@@ -153,7 +156,7 @@ int main(int argc, char **argv){
                 response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " 
                 + std::to_string(userAgent.size()) + "\r\n\r\n" + userAgent;
             }
-            else if(path.substr(0,6) == "/files"){
+            else if(path.substr(0,6) == "/files" && method == "GET"){
                 std::string fileName = path.substr(7);
                 std::string filePath = rootDirectory;
                 if(filePath.empty() || filePath.back() == '/'){
@@ -171,10 +174,28 @@ int main(int argc, char **argv){
                     std::string fileContent(fileSize, '\0');
                     file.read(fileContent.data(), fileSize);
 
-                    std::cout<<"";
-
                     response = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " 
                     + std::to_string(fileSize) + "\r\n\r\n" + fileContent;
+                }
+                else{
+                    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                }
+            }
+            else if(path.substr(0,6) == "/files" && method == "POST"){
+                std::string fileName = path.substr(7);
+                std::string filePath = rootDirectory;
+                if(filePath.empty() || filePath.back() == '/'){
+                    filePath += fileName;
+                }
+                else{
+                    filePath += "/" + fileName;
+                }
+                std::fstream file(filePath, std::ios::binary | std::ios::out);
+                if(file && headers["content-length"]){
+                    int fileSize = std::stoi(headers["content-length"]);
+                    file.write(requestBody.data(), fileSize);
+
+                    response = "HTTP/1.1 201 Created\r\n\r\n";
                 }
                 else{
                     response = "HTTP/1.1 404 Not Found\r\n\r\n";
