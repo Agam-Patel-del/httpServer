@@ -13,6 +13,7 @@
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <semaphore>
 #include <netinet/in.h>
 #include <map>
 
@@ -63,24 +64,27 @@ int main(int argc, char **argv){
         }
     });
 
+    std::counting_semaphore<4> workerSlots(4);
     std::cout << "Waiting for a client to connect\n";
     while(!stopServer.load()){
         struct sockaddr_in clientAddr{};
         socklen_t clientAddrLen = sizeof(clientAddr);
 
-
+        workerSlots.acquire();
         int clientFd = accept(serverFd, (struct sockaddr *)&clientAddr, &clientAddrLen);
         if(clientFd < 0){
+            workerSlots.release();
             if(stopServer.load()) break;
             std::cout << "Failed to accept the connection\n";
             continue;
         }
 
-        std::thread([clientFd](){
+        std::thread([clientFd, &workerSlots](){
             char buffer[2048];
             int bytesReceived = recv(clientFd, buffer, sizeof(buffer)-1, 0);
             if(bytesReceived <= 0){
                 close(clientFd);
+                workerSlots.release();
                 return;
             }
 
@@ -141,6 +145,7 @@ int main(int argc, char **argv){
             std::cout << "Client connected\n";
             send(clientFd, response.c_str(), response.size(), 0);
             close(clientFd);
+            workerSlots.release();
         }).detach();
     }
 
