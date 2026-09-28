@@ -16,10 +16,25 @@
 #include <semaphore>
 #include <netinet/in.h>
 #include <map>
+#include <fstream>
 
 int main(int argc, char **argv){
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
+
+    std::string rootDirectory = ".";
+    for(int i=1; i<argc; i++){
+        std::string arg = argv[i];
+        if(arg == "--directory"){
+            if(i+1 < argc){
+                rootDirectory = argv[++i];
+            }
+            else{
+                std::cerr<<"Missing directory after --directory\n";
+                return 1;
+            }
+        }
+    }
 
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
     if(serverFd < 0){
@@ -79,7 +94,7 @@ int main(int argc, char **argv){
             continue;
         }
 
-        std::thread([clientFd, &workerSlots](){
+        std::thread([clientFd, &workerSlots, &rootDirectory](){
             char buffer[2048];
             int bytesReceived = recv(clientFd, buffer, sizeof(buffer)-1, 0);
             if(bytesReceived <= 0){
@@ -137,6 +152,33 @@ int main(int argc, char **argv){
                 std::string userAgent = headers["user-agent"];
                 response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " 
                 + std::to_string(userAgent.size()) + "\r\n\r\n" + userAgent;
+            }
+            else if(path.substr(0,6) == "/files"){
+                std::string fileName = path.substr(7);
+                std::string filePath = rootDirectory;
+                if(filePath.empty() || filePath.back() == '/'){
+                    filePath += fileName;
+                }
+                else{
+                    filePath += "/" + fileName;
+                }
+                std::fstream file(filePath, std::ios::binary | std::ios::in);
+                if(file){
+                    file.seekg(0, std::ios::end);
+                    int fileSize = file.tellg();
+                    file.seekg(0, std::ios::beg);
+
+                    std::string fileContent(fileSize, '\0');
+                    file.read(fileContent.data(), fileSize);
+
+                    std::cout<<"";
+
+                    response = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " 
+                    + std::to_string(fileSize) + "\r\n\r\n" + fileContent;
+                }
+                else{
+                    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                }
             }
             else{
                 response = "HTTP/1.1 404 Not Found\r\n\r\n";
